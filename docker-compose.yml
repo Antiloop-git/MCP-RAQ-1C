@@ -1,0 +1,127 @@
+services:
+  parser:
+    build: ./parser
+    ports:
+      - "${PARSER_PORT:-8001}:8001"
+    volumes:
+      - ${CONFIG_HOST_PATH:-./Конфигуратор}:/app/Конфигуратор:ro
+    environment:
+      - CONFIG_PATH=${CONFIG_PATH:-/app/Конфигуратор/Prod}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - mcp-network
+
+  embeddings:
+    build: ./embeddings
+    ports:
+      - "${EMBEDDINGS_PORT:-5050}:5000"
+    volumes:
+      - model_cache:/root/.cache/huggingface
+    environment:
+      - MODEL_NAME=${MODEL_NAME:-sergeyzh/BERTA}
+      - MODEL_DIMENSIONS=${MODEL_DIMENSIONS:-768}
+      - HOST=0.0.0.0
+      - PORT=5000
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+    networks:
+      - mcp-network
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - mcp-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  loader:
+    build: ./loader
+    ports:
+      - "${LOADER_PORT:-8501}:8501"
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - EMBEDDING_SERVICE_URL=http://embeddings:5000
+      - PARSER_SERVICE_URL=http://parser:8001
+      - ROW_BATCH_SIZE=${ROW_BATCH_SIZE:-200}
+      - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE:-32}
+      - VECTOR_DIMENSIONS=${VECTOR_DIMENSIONS:-768}
+      - DEFAULT_COLLECTION=${DEFAULT_COLLECTION:-metadata_1c}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      embeddings:
+        condition: service_healthy
+      parser:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - mcp-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  mcp-server:
+    build: ./mcp-server
+    ports:
+      - "${MCP_SERVER_PORT:-8000}:8000"
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - EMBEDDING_SERVICE_URL=http://embeddings:5000
+      - DEFAULT_COLLECTION=${DEFAULT_COLLECTION:-metadata_1c}
+      - PORT=8000
+      - HOST=0.0.0.0
+      - SEARCH_LIMIT=${SEARCH_LIMIT:-10}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - mcp-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  qdrant_data:
+  model_cache:
+
+networks:
+  mcp-network:
+    driver: bridge

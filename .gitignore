@@ -1,0 +1,61 @@
+# Environment
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+qdrant_data/
+
+# 1C configuration dumps (large files)
+Конфигуратор/
+
+# Parsed metadata (generated, large)
+parsed_metadata/
+
+# Reference projects (external)
+1/
+
+# Test results (generated)
+test-results/
+
+# Old documentation (not for git)
+_archive/
+
+# Claude Code project settings
+.claude/
+
+# Uploaded archives
+uploads/
+*.zip
+
+# Logs
+*.log
+logs/
+
+# Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# TypeScript
+dist/
+*.js.map
+*.tsbuildinfo
+
+# HuggingFace model cache
+model_cache/
+.cache/

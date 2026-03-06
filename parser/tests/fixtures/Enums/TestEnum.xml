@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.17">
+	<Enum uuid="00000000-0000-0000-0000-000000000050">
+		<InternalInfo/>
+		<Properties>
+			<Name>ВидыОплат</Name>
+			<Synonym>
+				<v8:item>
+					<v8:lang>ru</v8:lang>
+					<v8:content>Виды оплат</v8:content>
+				</v8:item>
+			</Synonym>
+			<Comment>Способы оплаты</Comment>
+		</Properties>
+		<ChildObjects>
+			<EnumValue uuid="00000000-0000-0000-0000-000000000051">
+				<Properties>
+					<Name>Наличная</Name>
+					<Synonym>
+						<v8:item>
+							<v8:lang>ru</v8:lang>
+							<v8:content>Наличная</v8:content>
+						</v8:item>
+					</Synonym>
+					<Comment>Наличный расчёт</Comment>
+				</Properties>
+			</EnumValue>
+			<EnumValue uuid="00000000-0000-0000-0000-000000000052">
+				<Properties>
+					<Name>Безналичная</Name>
+					<Synonym>
+						<v8:item>
+							<v8:lang>ru</v8:lang>
+							<v8:content>Безналичная</v8:content>
+						</v8:item>
+					</Synonym>
+					<Comment/>
+				</Properties>
+			</EnumValue>
+			<EnumValue uuid="00000000-0000-0000-0000-000000000053">
+				<Properties>
+					<Name>Бартер</Name>
+					<Synonym>
+						<v8:item>
+							<v8:lang>ru</v8:lang>
+							<v8:content>Бартер</v8:content>
+						</v8:item>
+					</Synonym>
+					<Comment/>
+				</Properties>
+			</EnumValue>
+		</ChildObjects>
+	</Enum>
+</MetaDataObject>
