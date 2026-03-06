@@ -39,7 +39,7 @@ Cursor должен вызвать `1c_metadata_search`, затем `1c_metadata
 
 ## 5. agents.md
 
-Скопируйте `agents.md` из корня MCP_RAQ_1C в корень вашего 1С-проекта — Cursor использует его как инструкцию для работы с tools.
+Скопируйте `docs/agents.md` из MCP_RAQ_1C в корень вашего 1С-проекта — Cursor использует его как инструкцию для работы с tools.
 
 ## Multi-tenancy
 

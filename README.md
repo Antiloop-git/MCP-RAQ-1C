@@ -171,6 +171,7 @@ docker compose up -d
 ### Cursor / VS Code / RooCode
 
 Подробные инструкции:
+- [Claude Code](docs/claude-code-setup.md)
 - [Cursor](docs/cursor-setup.md)
 - [VS Code](docs/vscode-setup.md)
 - [RooCode](docs/roocode-setup.md)
@@ -178,7 +179,7 @@ docker compose up -d
 ## Документация
 
 - [План реализации](docs/implementation-plan.md) — детальный тактический план с задачами
-- [agents.md](agents.md) — инструкция для LLM-агентов (копировать в корень 1С-проекта)
+- [agents.md](docs/agents.md) — инструкция для LLM-агентов (копировать в корень 1С-проекта)
 
 ## Лицензия
 

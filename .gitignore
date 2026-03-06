@@ -34,8 +34,9 @@ test-results/
 # Old documentation (not for git)
 _archive/
 
-# Claude Code project settings
-.claude/
+# Claude Code project settings (except skills)
+.claude/*
+!.claude/skills/
 
 # Uploaded archives
 uploads/
