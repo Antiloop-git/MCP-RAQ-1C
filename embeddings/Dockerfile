@@ -9,6 +9,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN adduser --disabled-password --no-create-home appuser \
+    && mkdir -p /home/appuser/.cache/huggingface \
+    && chown -R appuser /home/appuser/.cache
+USER appuser
+
 EXPOSE 5000
 
 CMD ["uvicorn", "embedding_service:app", "--host", "0.0.0.0", "--port", "5000"]

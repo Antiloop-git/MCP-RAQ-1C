@@ -82,7 +82,17 @@ app.delete("/mcp", async (req, res) => {
 });
 
 // --- SSE transport (GET /sse + POST /messages) for backward compatibility ---
-const sseTransports = new Map<string, SSEServerTransport>();
+const sseTransports = new Map<string, { transport: SSEServerTransport; createdAt: number }>();
+
+// Cleanup stale SSE sessions every 10 minutes (TTL: 30 min)
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, entry] of sseTransports) {
+    if (now - entry.createdAt > SESSION_TTL_MS) {
+      sseTransports.delete(id);
+    }
+  }
+}, 10 * 60 * 1000);
 
 app.get("/sse", async (req, res) => {
   const collectionName =
@@ -91,7 +101,7 @@ app.get("/sse", async (req, res) => {
   const server = createMcpServer(getCollection);
 
   const transport = new SSEServerTransport("/messages", res);
-  sseTransports.set(transport.sessionId, transport);
+  sseTransports.set(transport.sessionId, { transport, createdAt: Date.now() });
 
   transport.onclose = () => {
     sseTransports.delete(transport.sessionId);
@@ -106,7 +116,7 @@ app.post("/messages", async (req, res) => {
     res.status(400).json({ error: "Invalid or missing session ID" });
     return;
   }
-  const transport = sseTransports.get(sessionId)!;
+  const { transport } = sseTransports.get(sessionId)!;
   await transport.handlePostMessage(req, res, req.body);
 });
 

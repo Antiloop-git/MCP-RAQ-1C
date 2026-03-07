@@ -22,7 +22,7 @@ services:
     ports:
       - "${EMBEDDINGS_PORT:-5050}:5000"
     volumes:
-      - model_cache:/root/.cache/huggingface
+      - model_cache:/home/appuser/.cache/huggingface
     environment:
       - MODEL_NAME=${MODEL_NAME:-sergeyzh/BERTA}
       - MODEL_DIMENSIONS=${MODEL_DIMENSIONS:-768}
@@ -46,7 +46,7 @@ services:
     image: qdrant/qdrant:v1.13.2
     ports:
       - "${QDRANT_PORT:-6333}:6333"
-      - "6334:6334"
+      - "127.0.0.1:6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:

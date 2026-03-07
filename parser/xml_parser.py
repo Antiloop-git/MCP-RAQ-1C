@@ -304,8 +304,8 @@ def _read_bsl_modules(obj_dir: Path) -> dict[str, str]:
                 if code:
                     key = bsl_name.replace(".bsl", "")
                     modules[key] = code
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Warning: failed to read {bsl_path}: {e}")
     return modules
 
 
@@ -317,12 +317,13 @@ def _parse_predefined(obj_dir: Path) -> list[PredefinedItem]:
 
     items = []
     try:
-        tree = etree.parse(predef_path)
+        _safe_parser = etree.XMLParser(resolve_entities=False, no_network=True)
+        tree = etree.parse(predef_path, _safe_parser)
         root = tree.getroot()
         # Рекурсивно собираем все Item
         _collect_predefined_items(root, items)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Warning: failed to parse predefined {predef_path}: {e}")
     return items
 
 
@@ -383,7 +384,8 @@ def parse_file(filepath: Path) -> MetadataObject | None:
     Returns:
         MetadataObject или None если файл не является поддерживаемым типом.
     """
-    tree = etree.parse(filepath)
+    _safe_parser = etree.XMLParser(resolve_entities=False, no_network=True)
+    tree = etree.parse(filepath, _safe_parser)
     root = tree.getroot()
 
     obj_el = None

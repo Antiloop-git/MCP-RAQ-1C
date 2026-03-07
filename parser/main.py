@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 
-from config import CONFIG_PATH
+import config as cfg
 from models import MetadataObject, ObjectType
 from xml_parser import DIR_TO_TYPE, parse_directory, parse_file
 
@@ -15,12 +15,14 @@ _cache: list[MetadataObject] = []
 # Индекс: {object_type: {name: [MetadataObject, ...]}}
 _index: dict[ObjectType, dict[str, list[MetadataObject]]] = {}
 
+ALLOWED_CONFIG_PREFIX = Path("/app/Конфигуратор")
+
 
 def _ensure_cache() -> None:
     """Парсит конфигурацию и заполняет кеш, если ещё не заполнен."""
     if _cache:
         return
-    objects = parse_directory(CONFIG_PATH)
+    objects = parse_directory(cfg.CONFIG_PATH)
     _cache.extend(objects)
     for obj in objects:
         _index.setdefault(obj.object_type, {}).setdefault(obj.name, []).append(obj)
@@ -100,7 +102,7 @@ def stats():
 @app.get("/config-path")
 def get_config_path():
     """Возвращает текущий путь к XML-выгрузке."""
-    return {"config_path": str(CONFIG_PATH)}
+    return {"config_path": str(cfg.CONFIG_PATH)}
 
 
 @app.post("/reload")
@@ -110,28 +112,28 @@ def reload(config_path: str | None = None):
     Args:
         config_path: новый путь к XML-выгрузке (query parameter, опционально).
     """
-    global CONFIG_PATH
     if config_path:
-        import config as cfg
-
-        new_path = Path(config_path)
+        new_path = Path(config_path).resolve()
+        if not str(new_path).startswith(str(ALLOWED_CONFIG_PREFIX)):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Путь должен начинаться с {ALLOWED_CONFIG_PREFIX}",
+            )
         if not new_path.is_dir():
             raise HTTPException(
                 status_code=400, detail=f"Путь не найден: {config_path}"
             )
         cfg.CONFIG_PATH = new_path
-        CONFIG_PATH = new_path
     _invalidate_cache()
     _ensure_cache()
     return {
         "status": "reloaded",
         "total_objects": len(_cache),
-        "config_path": str(CONFIG_PATH),
+        "config_path": str(cfg.CONFIG_PATH),
     }
 
 
 if __name__ == "__main__":
     import uvicorn
-    from config import HOST, PORT
 
-    uvicorn.run("main:app", host=HOST, port=PORT, reload=True)
+    uvicorn.run("main:app", host=cfg.HOST, port=cfg.PORT, reload=True)
