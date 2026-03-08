@@ -34,6 +34,9 @@ test-results/
 # Old documentation (not for git)
 _archive/
 
+# Private / sensitive docs (not for git)
+_private/
+
 # Claude Code project settings (except skills)
 .claude/*
 !.claude/skills/

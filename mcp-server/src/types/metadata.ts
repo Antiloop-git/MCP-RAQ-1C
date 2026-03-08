@@ -6,6 +6,16 @@ export interface SearchResult {
   score: number;
 }
 
+export interface CodeSearchResult {
+  filePath: string;
+  objectName: string;
+  objectType: string;
+  moduleType: string;
+  procName: string;
+  chunkText: string;
+  score: number;
+}
+
 export interface MetadataDetails {
   object_name: string;
   object_type: string;

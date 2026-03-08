@@ -5,6 +5,7 @@ import type {
   SearchResult,
   MetadataDetails,
   ObjectTypeStats,
+  CodeSearchResult,
 } from "../types/metadata.js";
 
 const client = new QdrantClient({
@@ -36,13 +37,13 @@ export async function hybridSearch(
 
   const filter = objectType
     ? {
-        must: [
-          {
-            key: "object_type",
-            match: { any: [objectType] },
-          },
-        ],
-      }
+      must: [
+        {
+          key: "object_type",
+          match: { any: [objectType] },
+        },
+      ],
+    }
     : undefined;
 
   const results = await client.query(collectionName, {
@@ -106,7 +107,7 @@ export async function getObjectTypeStats(
   const statsMap = new Map<string, { typeRu: string; count: number }>();
   let offset: string | number | undefined = undefined;
 
-  for (;;) {
+  for (; ;) {
     const result = await client.scroll(collectionName, {
       limit: 250,
       with_payload: ["object_type", "object_type_ru"],
@@ -132,4 +133,70 @@ export async function getObjectTypeStats(
   return Array.from(statsMap.entries())
     .map(([type, { typeRu, count }]) => ({ type, typeRu, count }))
     .sort((a, b) => b.count - a.count);
+}
+
+
+// ---------------------------------------------------------------------------
+// BSL Code Search
+// ---------------------------------------------------------------------------
+
+export interface CodeSearchOptions {
+  objectName?: string;
+  objectType?: string;
+  limit?: number;
+  collectionName?: string;
+}
+
+export async function codeSearch(
+  query: string,
+  options: CodeSearchOptions = {}
+): Promise<CodeSearchResult[]> {
+  const {
+    objectName,
+    objectType,
+    limit = 5,
+    collectionName = "code_1c",
+  } = options;
+
+  const [dense, sparse] = await Promise.all([
+    embedText(query),
+    embedTextSparse(query),
+  ]);
+
+  const must: Array<Record<string, unknown>> = [];
+  if (objectName) {
+    must.push({ key: "object_name", match: { value: objectName } });
+  }
+  if (objectType) {
+    must.push({ key: "object_type", match: { value: objectType } });
+  }
+  const filter = must.length > 0 ? { must } : undefined;
+
+  const results = await client.query(collectionName, {
+    prefetch: [
+      { query: dense, using: "code", limit: limit * 3 },
+      {
+        query: { indices: sparse.indices, values: sparse.values },
+        using: "bm25",
+        limit: limit * 3,
+      },
+    ],
+    query: { fusion: "rrf" },
+    filter,
+    limit,
+    with_payload: true,
+  });
+
+  return (results.points || []).map((point: any) => {
+    const p = point.payload as Record<string, unknown>;
+    return {
+      filePath: p.file_path as string,
+      objectName: p.object_name as string,
+      objectType: p.object_type as string,
+      moduleType: p.module_type as string,
+      procName: p.proc_name as string,
+      chunkText: p.chunk_text as string,
+      score: (point.score as number) ?? 0,
+    };
+  });
 }

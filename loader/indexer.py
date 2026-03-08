@@ -1,7 +1,10 @@
 """Батчевая индексация метаданных 1С в Qdrant."""
 
+import os
+import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import httpx
 from qdrant_client import QdrantClient
@@ -230,6 +233,223 @@ class QdrantIndexer:
             if progress_callback:
                 progress_callback(stats.indexed, stats.total_objects)
 
+        return stats
+
+    def close(self):
+        self.http.close()
+        self.client.close()
+
+
+# ---------------------------------------------------------------------------
+# BSL Code Indexer
+# ---------------------------------------------------------------------------
+
+BSL_PROC_PATTERN = re.compile(
+    r'^(Процедура|Функция|Procedure|Function)\s+(\S+)',
+    re.MULTILINE | re.IGNORECASE,
+)
+
+DEFAULT_CODE_COLLECTION = "code_1c"
+
+
+@dataclass
+class BslChunk:
+    file_path: str          # относительный путь к .bsl файлу
+    object_name: str        # имя объекта (из имени файла)
+    object_type: str        # тип объекта (из имени файла)
+    module_type: str        # ObjectModule / ManagerModule и т.д.
+    proc_name: str          # имя процедуры/функции (или "<module>" для начала файла)
+    chunk_text: str         # текст чанка (до 4000 символов)
+
+
+@dataclass
+class BslIndexStats:
+    total_files: int = 0
+    total_chunks: int = 0
+    indexed: int = 0
+    errors: int = 0
+
+
+def _parse_bsl_file(path: Path, base_dir: Path) -> list[BslChunk]:
+    """Разбивает .bsl файл на чанки по процедурам/функциям.
+
+    Ожидаемая структура: .../modules/{ObjectType}/{ObjectName}.{ModuleType}.bsl
+    Например: modules/Document/SS_ЗаказКлиента.ObjectModule.bsl
+    """
+    try:
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+    except Exception:
+        return []
+
+    # object_type берём из имени родительской папки (Document, Catalog, ...)
+    object_type = path.parent.name
+    # object_name и module_type — из стема файла: "SS_ЗаказКлиента.ObjectModule"
+    parts = path.stem.split(".")
+    object_name = parts[0]
+    module_type = ".".join(parts[1:]) if len(parts) > 1 else "module"
+
+    rel_path = str(path.relative_to(base_dir))
+    chunks: list[BslChunk] = []
+
+    # Находим позиции всех процедур/функций
+    matches = list(BSL_PROC_PATTERN.finditer(text))
+
+    if not matches:
+        # Весь файл — один чанк
+        chunk_text = text[:4000]
+        if chunk_text.strip():
+            chunks.append(BslChunk(
+                file_path=rel_path,
+                object_name=object_name,
+                object_type=object_type,
+                module_type=module_type,
+                proc_name="<module>",
+                chunk_text=chunk_text,
+            ))
+        return chunks
+
+    # Чанк до первой процедуры (инициализация модуля)
+    preamble = text[:matches[0].start()].strip()
+    if preamble:
+        chunks.append(BslChunk(
+            file_path=rel_path,
+            object_name=object_name,
+            object_type=object_type,
+            module_type=module_type,
+            proc_name="<module>",
+            chunk_text=preamble[:4000],
+        ))
+
+    # Чанк для каждой процедуры/функции
+    for idx, m in enumerate(matches):
+        start = m.start()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+        proc_name = m.group(2)
+        chunk_text = text[start:end].strip()[:4000]
+        if chunk_text:
+            chunks.append(BslChunk(
+                file_path=rel_path,
+                object_name=object_name,
+                object_type=object_type,
+                module_type=module_type,
+                proc_name=proc_name,
+                chunk_text=chunk_text,
+            ))
+
+    return chunks
+
+
+class BslIndexer:
+    """Индексирует BSL-файлы конфигурации 1С в Qdrant (коллекция code_1c)."""
+
+    CODE_VECTOR_NAME = "code"
+
+    def __init__(self, qdrant_host: str = QDRANT_HOST, qdrant_port: int = QDRANT_PORT):
+        self.client = QdrantClient(host=qdrant_host, port=qdrant_port)
+        self.http = httpx.Client(base_url=EMBEDDING_SERVICE_URL, timeout=60.0)
+
+    def create_collection(self, collection_name: str = DEFAULT_CODE_COLLECTION) -> None:
+        """Создаёт/пересоздаёт коллекцию для BSL-кода."""
+        collections = [c.name for c in self.client.get_collections().collections]
+        if collection_name in collections:
+            self.client.delete_collection(collection_name)
+
+        self.client.create_collection(
+            collection_name=collection_name,
+            vectors_config={
+                self.CODE_VECTOR_NAME: VectorParams(
+                    size=VECTOR_DIMENSIONS,
+                    distance=Distance.COSINE,
+                    on_disk=True,
+                    hnsw_config=HnswConfigDiff(m=16, ef_construct=100),
+                ),
+            },
+            sparse_vectors_config={
+                "bm25": SparseVectorParams(),
+            },
+        )
+
+    def _embed_dense(self, texts: list[str]) -> list[list[float]]:
+        resp = self.http.post("/embed", json={"texts": texts, "prefix": "search_document"})
+        resp.raise_for_status()
+        return resp.json()["embeddings"]
+
+    def _embed_sparse(self, texts: list[str]) -> list[dict]:
+        resp = self.http.post("/embed-sparse", json={"texts": texts})
+        resp.raise_for_status()
+        return resp.json()["embeddings"]
+
+    def index_directory(
+        self,
+        modules_dir: str,
+        collection_name: str = DEFAULT_CODE_COLLECTION,
+        batch_size: int = 16,
+        progress_callback=None,
+    ) -> BslIndexStats:
+        """Индексирует все .bsl файлы из указанной директории.
+
+        Args:
+            modules_dir: путь к папке с .bsl файлами (например, parsed_metadata/modules).
+            collection_name: имя коллекции Qdrant.
+            batch_size: количество чанков в одном батче.
+            progress_callback: callable(indexed_files, total_files).
+        """
+        base_dir = Path(modules_dir)
+        bsl_files = sorted(base_dir.rglob("*.bsl"))
+        stats = BslIndexStats(total_files=len(bsl_files))
+
+        # Собираем все чанки
+        all_chunks: list[BslChunk] = []
+        for bsl_path in bsl_files:
+            chunks = _parse_bsl_file(bsl_path, base_dir)
+            all_chunks.extend(chunks)
+
+        stats.total_chunks = len(all_chunks)
+
+        # Индексируем батчами
+        files_done = set()
+        for batch_start in range(0, len(all_chunks), batch_size):
+            batch = all_chunks[batch_start : batch_start + batch_size]
+            texts = [c.chunk_text for c in batch]
+
+            try:
+                dense_vecs = self._embed_dense(texts)
+                sparse_vecs = self._embed_sparse(texts)
+
+                points = []
+                for i, chunk in enumerate(batch):
+                    point = PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector={
+                            self.CODE_VECTOR_NAME: dense_vecs[i],
+                            "bm25": SparseVector(
+                                indices=sparse_vecs[i]["indices"],
+                                values=sparse_vecs[i]["values"],
+                            ),
+                        },
+                        payload={
+                            "file_path": chunk.file_path,
+                            "object_name": chunk.object_name,
+                            "object_type": chunk.object_type,
+                            "module_type": chunk.module_type,
+                            "proc_name": chunk.proc_name,
+                            "chunk_text": chunk.chunk_text,
+                        },
+                    )
+                    points.append(point)
+                    files_done.add(chunk.file_path)
+
+                self.client.upsert(collection_name=collection_name, points=points)
+                stats.indexed += len(batch)
+
+            except Exception as e:
+                print(f"Error indexing BSL batch at {batch_start}: {e}")
+                stats.errors += len(batch)
+
+            if progress_callback:
+                progress_callback(len(files_done), stats.total_files)
+
+        stats.total_files = len(bsl_files)
         return stats
 
     def close(self):
