@@ -1,0 +1,91 @@
+# docker-compose.comol.yml
+# 4 MCP-сервера от comol/DISTAR для разработки на 1С
+# Запуск: docker compose -f docker-compose.comol.yml --env-file .env.comol up -d
+#
+# Лицензионные ключи и настройки задаются через .env.comol
+# (скопируйте .env.example.comol -> .env.comol и заполните реальными ключами)
+
+services:
+
+  # Справка по платформе 1С:Предприятие 8.3
+  # MCP endpoint: http://localhost:8003/mcp
+  1c-help-mcp:
+    image: comol/1c_help_mcp:latest
+    container_name: 1c_help_mcp
+    ports:
+      - "${COMOL_HELP_PORT:-8003}:8003"
+    environment:
+      - LICENSE_KEY=${LICENSE_KEY_HELP:?LICENSE_KEY_HELP is required}
+      - 1C_BIN_PATH=${ONEC_BIN_PATH:-/1c_docs}
+      - RESET_CACHE=${COMOL_HELP_RESET_CACHE:-false}
+      - RESET_DATABASE=${COMOL_HELP_RESET_DATABASE:-false}
+      - USESSE=${COMOL_USESSE:-false}
+    volumes:
+      - comol_help_db:/app/chroma_db
+      - comol_help_model_cache:/app/model_cache
+    restart: unless-stopped
+    networks:
+      - comol-network
+
+  # Шаблоны кода 1С + веб-редактор (http://localhost:8004/extend/)
+  # MCP endpoint: http://localhost:8004/mcp
+  template-search-mcp:
+    image: comol/template-search-mcp:latest
+    container_name: template_search_mcp
+    ports:
+      - "${COMOL_TEMPLATES_PORT:-8004}:8004"
+    environment:
+      - LICENSE_KEY=${LICENSE_KEY_TEMPLATES:?LICENSE_KEY_TEMPLATES is required}
+      - RESET_CACHE=${COMOL_TEMPLATES_RESET_CACHE:-false}
+      - RESET_DATABASE=${COMOL_TEMPLATES_RESET_DATABASE:-false}
+      - USESSE=${COMOL_USESSE:-false}
+    volumes:
+      - comol_templates_db:/app/data
+    restart: unless-stopped
+    networks:
+      - comol-network
+
+  # Проверка синтаксиса BSL через BSL Language Server
+  # MCP endpoint: http://localhost:8002/mcp
+  1c-syntaxcheck-mcp:
+    image: comol/1c_syntaxcheck_mcp:latest
+    container_name: 1c_syntaxcheck_mcp
+    ports:
+      - "${COMOL_SYNTAX_PORT:-8002}:8002"
+    environment:
+      - LICENSE_KEY=${LICENSE_KEY_SYNTAX:?LICENSE_KEY_SYNTAX is required}
+      - USESSE=${COMOL_USESSE:-false}
+    restart: unless-stopped
+    networks:
+      - comol-network
+
+  # Справка по Библиотеке стандартных подсистем (БСП)
+  # MCP endpoint: http://localhost:8008/mcp
+  mcp-ssl-server:
+    image: comol/mcp_ssl_server:latest
+    container_name: mcp_ssl_server
+    ports:
+      - "${COMOL_SSL_PORT:-8008}:8008"
+    environment:
+      - LICENSE_KEY=${LICENSE_KEY_SSL:?LICENSE_KEY_SSL is required}
+      - SSL_VERSION=${SSL_VERSION:-3.1.11}
+      - RESET_CACHE=${COMOL_SSL_RESET_CACHE:-false}
+      - RESET_DATABASE=${COMOL_SSL_RESET_DATABASE:-false}
+      - USESSE=${COMOL_USESSE:-false}
+    volumes:
+      - comol_ssl_db:/app/chroma_db
+      - comol_ssl_model_cache:/app/model_cache
+    restart: unless-stopped
+    networks:
+      - comol-network
+
+volumes:
+  comol_help_db:
+  comol_help_model_cache:
+  comol_templates_db:
+  comol_ssl_db:
+  comol_ssl_model_cache:
+
+networks:
+  comol-network:
+    driver: bridge
