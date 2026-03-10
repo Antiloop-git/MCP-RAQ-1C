@@ -96,6 +96,8 @@ services:
     build: ./mcp-server
     ports:
       - "${MCP_SERVER_PORT:-8000}:8000"
+    volumes:
+      - ${PARSED_METADATA_PATH:-./parsed_metadata}:/app/parsed_metadata:ro
     environment:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
