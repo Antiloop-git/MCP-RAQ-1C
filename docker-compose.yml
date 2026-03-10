@@ -104,6 +104,11 @@ services:
       - PORT=8000
       - HOST=0.0.0.0
       - SEARCH_LIMIT=${SEARCH_LIMIT:-10}
+      # OData integration (optional — set ODATA_URL to enable live data tools)
+      - ODATA_URL=${ODATA_URL:-}
+      - ODATA_USER=${ODATA_USER:-}
+      - ODATA_PASSWORD=${ODATA_PASSWORD:-}
+      - ODATA_TIMEOUT=${ODATA_TIMEOUT:-30000}
     depends_on:
       qdrant:
         condition: service_healthy
