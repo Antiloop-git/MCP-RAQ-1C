@@ -11,7 +11,15 @@ from config import (
     QDRANT_PORT,
     ROW_BATCH_SIZE,
 )
-from indexer import QdrantIndexer, BslIndexer, DEFAULT_CODE_COLLECTION
+from indexer import (
+    QdrantIndexer,
+    BslIndexer,
+    ContentIndexer,
+    DEFAULT_CODE_COLLECTION,
+    DEFAULT_HELP_COLLECTION,
+    DEFAULT_BSP_COLLECTION,
+    DEFAULT_TEMPLATES_COLLECTION,
+)
 
 
 st.set_page_config(page_title="MCP RAQ 1C — Loader", layout="wide")
@@ -51,7 +59,9 @@ all_ok = parser_ok and embeddings_ok and qdrant_ok
 # ============================================================
 # Вкладки
 # ============================================================
-tab_meta, tab_bsl = st.tabs(["🗂️ Метаданные", "📝 BSL-код"])
+tab_meta, tab_bsl, tab_help, tab_bsp, tab_tpl = st.tabs([
+    "🗂️ Метаданные", "📝 BSL-код", "📚 Справка платформы", "📖 Справка БСП", "🧩 Шаблоны кода",
+])
 
 with tab_meta:
     # --- Настройки ---
@@ -271,4 +281,234 @@ with tab_bsl:
             f"- Чанков: {bsl_stats.total_chunks}\n"
             f"- Проиндексировано: {bsl_stats.indexed}\n"
             f"- Ошибок: {bsl_stats.errors}"
+        )
+
+
+# ============================================================
+# Вкладка: Справка платформы (#15)
+# ============================================================
+with tab_help:
+    st.subheader("Индексация справки платформы 1С:Предприятие")
+    st.markdown(
+        "Парсит HBK-файл (zip-архив с HTML-документацией платформы 1С) и индексирует "
+        "в Qdrant. Позволяет MCP-агенту искать по документации платформы."
+    )
+
+    help_collection = st.text_input(
+        "Коллекция для справки платформы",
+        value=DEFAULT_HELP_COLLECTION,
+        key="help_collection",
+    )
+
+    help_ready = parser_ok and qdrant_ok and embeddings_ok
+    if not help_ready:
+        st.error("Нужны Parser + Qdrant + Embeddings.")
+
+    if st.button(
+        "✅ Индексировать справку платформы",
+        disabled=not help_ready,
+        type="primary",
+        key="index_help",
+        help="Вызывает Parser API /parse-hbk, получает чанки и индексирует в Qdrant.",
+    ):
+        help_progress = st.progress(0, text="Парсинг HBK-файла...")
+        help_status = st.empty()
+
+        help_status.text("Получение чанков из парсера (POST /parse-hbk)...")
+        try:
+            resp = httpx.post(f"{PARSER_SERVICE_URL}/parse-hbk", timeout=300.0)
+            resp.raise_for_status()
+            data = resp.json()
+            chunks = data["chunks"]
+        except Exception as e:
+            st.error(f"Ошибка парсинга HBK: {e}")
+            st.stop()
+
+        st.info(f"Получено {len(chunks)} чанков. Индексация...")
+        help_progress.progress(0.3, text=f"Чанков: {len(chunks)}. Создание коллекции...")
+
+        cidx = ContentIndexer()
+        try:
+            cidx.create_collection(help_collection)
+        except Exception as e:
+            st.error(f"Ошибка создания коллекции: {e}")
+            cidx.close()
+            st.stop()
+
+        def help_cb(indexed, total):
+            pct = 0.3 + 0.7 * (indexed / total if total > 0 else 0)
+            help_progress.progress(pct, text=f"Проиндексировано: {indexed}/{total}")
+
+        try:
+            stats = cidx.index_chunks(chunks, help_collection, text_field="content", progress_callback=help_cb)
+        except Exception as e:
+            st.error(f"Ошибка индексации: {e}")
+            cidx.close()
+            st.stop()
+
+        cidx.close()
+        help_progress.progress(1.0, text="Готово!")
+        help_status.empty()
+        st.success(
+            f"Справка платформы проиндексирована.\n\n"
+            f"- Чанков: {stats.total_objects}\n"
+            f"- Проиндексировано: {stats.indexed}\n"
+            f"- Ошибок: {stats.errors}"
+        )
+
+
+# ============================================================
+# Вкладка: Справка БСП (#16)
+# ============================================================
+with tab_bsp:
+    st.subheader("Индексация справки БСП")
+    st.markdown(
+        "Парсит HTML-файлы справки Библиотеки стандартных подсистем (БСП) из "
+        "XML-выгрузки конфигурации и индексирует в Qdrant."
+    )
+
+    bsp_collection = st.text_input(
+        "Коллекция для справки БСП",
+        value=DEFAULT_BSP_COLLECTION,
+        key="bsp_collection",
+    )
+
+    bsp_ready = parser_ok and qdrant_ok and embeddings_ok
+    if not bsp_ready:
+        st.error("Нужны Parser + Qdrant + Embeddings.")
+
+    if st.button(
+        "✅ Индексировать справку БСП",
+        disabled=not bsp_ready,
+        type="primary",
+        key="index_bsp",
+        help="Вызывает Parser API /parse-bsp-help, получает чанки и индексирует в Qdrant.",
+    ):
+        bsp_progress = st.progress(0, text="Парсинг справки БСП...")
+        bsp_status = st.empty()
+
+        bsp_status.text("Получение чанков из парсера (POST /parse-bsp-help)...")
+        try:
+            resp = httpx.post(f"{PARSER_SERVICE_URL}/parse-bsp-help", timeout=300.0)
+            resp.raise_for_status()
+            data = resp.json()
+            chunks = data["chunks"]
+        except Exception as e:
+            st.error(f"Ошибка парсинга БСП: {e}")
+            st.stop()
+
+        st.info(f"Получено {len(chunks)} чанков. Индексация...")
+        bsp_progress.progress(0.3, text=f"Чанков: {len(chunks)}. Создание коллекции...")
+
+        cidx = ContentIndexer()
+        try:
+            cidx.create_collection(bsp_collection)
+        except Exception as e:
+            st.error(f"Ошибка создания коллекции: {e}")
+            cidx.close()
+            st.stop()
+
+        def bsp_cb(indexed, total):
+            pct = 0.3 + 0.7 * (indexed / total if total > 0 else 0)
+            bsp_progress.progress(pct, text=f"Проиндексировано: {indexed}/{total}")
+
+        try:
+            stats = cidx.index_chunks(chunks, bsp_collection, text_field="content", progress_callback=bsp_cb)
+        except Exception as e:
+            st.error(f"Ошибка индексации: {e}")
+            cidx.close()
+            st.stop()
+
+        cidx.close()
+        bsp_progress.progress(1.0, text="Готово!")
+        bsp_status.empty()
+        st.success(
+            f"Справка БСП проиндексирована.\n\n"
+            f"- Чанков: {stats.total_objects}\n"
+            f"- Проиндексировано: {stats.indexed}\n"
+            f"- Ошибок: {stats.errors}"
+        )
+
+
+# ============================================================
+# Вкладка: Шаблоны кода (#20)
+# ============================================================
+with tab_tpl:
+    st.subheader("Индексация шаблонов кода 1С")
+    st.markdown(
+        "Загружает JSON-файл с шаблонами/сниппетами кода 1С и индексирует в Qdrant. "
+        "Позволяет MCP-агенту находить готовые примеры кода по запросу."
+    )
+
+    tpl_collection = st.text_input(
+        "Коллекция для шаблонов",
+        value=DEFAULT_TEMPLATES_COLLECTION,
+        key="tpl_collection",
+    )
+
+    tpl_ready = qdrant_ok and embeddings_ok
+    if not tpl_ready:
+        st.error("Нужны Qdrant + Embeddings.")
+
+    uploaded_file = st.file_uploader(
+        "JSON-файл с шаблонами",
+        type=["json"],
+        help='Массив объектов: [{"title": "...", "category": "...", "tags": [...], "description": "...", "code": "..."}]',
+    )
+
+    if st.button(
+        "✅ Индексировать шаблоны",
+        disabled=not (tpl_ready and uploaded_file is not None),
+        type="primary",
+        key="index_tpl",
+    ):
+        import json
+
+        tpl_progress = st.progress(0, text="Чтение JSON...")
+        tpl_status = st.empty()
+
+        try:
+            templates = json.loads(uploaded_file.read())
+        except Exception as e:
+            st.error(f"Ошибка чтения JSON: {e}")
+            st.stop()
+
+        if not isinstance(templates, list):
+            st.error("JSON должен быть массивом объектов.")
+            st.stop()
+
+        # Формируем text_field: объединяем title + description + code для эмбеддинга
+        for t in templates:
+            t["content"] = f"{t.get('title', '')} {t.get('description', '')} {t.get('code', '')}"
+
+        st.info(f"Загружено {len(templates)} шаблонов. Индексация...")
+        tpl_progress.progress(0.2, text=f"Шаблонов: {len(templates)}. Создание коллекции...")
+
+        cidx = ContentIndexer()
+        try:
+            cidx.create_collection(tpl_collection)
+        except Exception as e:
+            st.error(f"Ошибка создания коллекции: {e}")
+            cidx.close()
+            st.stop()
+
+        def tpl_cb(indexed, total):
+            pct = 0.2 + 0.8 * (indexed / total if total > 0 else 0)
+            tpl_progress.progress(pct, text=f"Проиндексировано: {indexed}/{total}")
+
+        try:
+            stats = cidx.index_chunks(templates, tpl_collection, text_field="content", progress_callback=tpl_cb)
+        except Exception as e:
+            st.error(f"Ошибка индексации: {e}")
+            cidx.close()
+            st.stop()
+
+        cidx.close()
+        tpl_progress.progress(1.0, text="Готово!")
+        tpl_status.empty()
+        st.success(
+            f"Шаблоны проиндексированы.\n\n"
+            f"- Шаблонов: {stats.total_objects}\n"
+            f"- Проиндексировано: {stats.indexed}\n"
+            f"- Ошибок: {stats.errors}"
         )

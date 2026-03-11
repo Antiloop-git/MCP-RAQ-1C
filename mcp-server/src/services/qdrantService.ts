@@ -200,3 +200,45 @@ export async function codeSearch(
     };
   });
 }
+
+
+// ---------------------------------------------------------------------------
+// Generic Search (for help, BSP, templates collections)
+// ---------------------------------------------------------------------------
+
+export interface GenericSearchResult {
+  payload: Record<string, unknown>;
+  score: number;
+}
+
+export async function genericSearch(
+  query: string,
+  collectionName: string,
+  options: { limit?: number; filter?: Record<string, unknown> } = {}
+): Promise<GenericSearchResult[]> {
+  const { limit = 10, filter } = options;
+  const [dense, sparse] = await Promise.all([
+    embedText(query),
+    embedTextSparse(query),
+  ]);
+
+  const results = await client.query(collectionName, {
+    prefetch: [
+      { query: dense, using: "content", limit: limit * 3 },
+      {
+        query: { indices: sparse.indices, values: sparse.values },
+        using: "bm25",
+        limit: limit * 3,
+      },
+    ],
+    query: { fusion: "rrf" },
+    filter,
+    limit,
+    with_payload: true,
+  });
+
+  return (results.points || []).map((point: any) => ({
+    payload: point.payload as Record<string, unknown>,
+    score: (point.score as number) ?? 0,
+  }));
+}

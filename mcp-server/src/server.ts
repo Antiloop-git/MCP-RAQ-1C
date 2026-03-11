@@ -8,12 +8,16 @@ import { registerRegisterBalances } from "./tools/registerBalances.js";
 import { registerRegisterMovements } from "./tools/registerMovements.js";
 import { registerDependencies } from "./tools/dependencies.js";
 import { registerSubsystems } from "./tools/subsystems.js";
+import { registerSyntaxCheck } from "./tools/syntaxCheck.js";
+import { registerHelpSearch } from "./tools/helpSearch.js";
+import { registerBspSearch } from "./tools/bspSearch.js";
+import { registerTemplateSearch } from "./tools/templateSearch.js";
 import { config } from "./config.js";
 
 export function createMcpServer(getCollection: () => string): McpServer {
   const server = new McpServer({
     name: "mcp-1c-metadata",
-    version: "0.3.0",
+    version: "0.4.0",
   });
 
   // Metadata tools (always available)
@@ -25,6 +29,19 @@ export function createMcpServer(getCollection: () => string): McpServer {
   // Graph & navigation tools (always available)
   registerDependencies(server, getCollection);
   registerSubsystems(server, getCollection);
+
+  // Dev tools: help, BSP, templates (always available — search fails gracefully if collection empty)
+  registerHelpSearch(server);
+  registerBspSearch(server);
+  registerTemplateSearch(server);
+
+  // BSL Language Server (available only when BSL_LS_URL is configured)
+  if (config.bslLsUrl) {
+    console.log(`BSL LS tools enabled: ${config.bslLsUrl}`);
+    registerSyntaxCheck(server);
+  } else {
+    console.log("BSL LS tools disabled (BSL_LS_URL not set)");
+  }
 
   // OData tools (available only when ODATA_URL is configured)
   if (config.odataUrl) {

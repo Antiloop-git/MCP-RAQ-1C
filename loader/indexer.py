@@ -455,3 +455,109 @@ class BslIndexer:
     def close(self):
         self.http.close()
         self.client.close()
+
+
+# ---------------------------------------------------------------------------
+# Help / BSP / Templates Indexer (generic content indexer)
+# ---------------------------------------------------------------------------
+
+DEFAULT_HELP_COLLECTION = "help_1c"
+DEFAULT_BSP_COLLECTION = "bsp_1c"
+DEFAULT_TEMPLATES_COLLECTION = "templates_1c"
+
+
+class ContentIndexer:
+    """Индексирует произвольный текстовый контент в Qdrant.
+
+    Используется для справки платформы, справки БСП и шаблонов кода.
+    Коллекция создаётся с named vectors: content (dense) + bm25 (sparse).
+    """
+
+    CONTENT_VECTOR_NAME = "content"
+
+    def __init__(self, qdrant_host: str = QDRANT_HOST, qdrant_port: int = QDRANT_PORT):
+        self.client = QdrantClient(host=qdrant_host, port=qdrant_port)
+        self.http = httpx.Client(base_url=EMBEDDING_SERVICE_URL, timeout=60.0)
+
+    def create_collection(self, collection_name: str) -> None:
+        collections = [c.name for c in self.client.get_collections().collections]
+        if collection_name in collections:
+            self.client.delete_collection(collection_name)
+
+        self.client.create_collection(
+            collection_name=collection_name,
+            vectors_config={
+                self.CONTENT_VECTOR_NAME: VectorParams(
+                    size=VECTOR_DIMENSIONS,
+                    distance=Distance.COSINE,
+                    on_disk=True,
+                    hnsw_config=HnswConfigDiff(m=16, ef_construct=100),
+                ),
+            },
+            sparse_vectors_config={
+                "bm25": SparseVectorParams(),
+            },
+        )
+
+    def _embed_dense(self, texts: list[str]) -> list[list[float]]:
+        resp = self.http.post("/embed", json={"texts": texts, "prefix": "search_document"})
+        resp.raise_for_status()
+        return resp.json()["embeddings"]
+
+    def _embed_sparse(self, texts: list[str]) -> list[dict]:
+        resp = self.http.post("/embed-sparse", json={"texts": texts})
+        resp.raise_for_status()
+        return resp.json()["embeddings"]
+
+    def index_chunks(
+        self,
+        chunks: list[dict],
+        collection_name: str,
+        text_field: str = "content",
+        batch_size: int = 32,
+        progress_callback=None,
+    ) -> IndexStats:
+        """Индексирует список чанков в Qdrant.
+
+        Каждый чанк — dict с произвольными полями. Поле text_field используется
+        для построения эмбеддингов. Все поля чанка сохраняются в payload.
+        """
+        stats = IndexStats(total_objects=len(chunks))
+
+        for batch_start in range(0, len(chunks), batch_size):
+            batch = chunks[batch_start : batch_start + batch_size]
+            texts = [c.get(text_field, "") for c in batch]
+
+            try:
+                dense_vecs = self._embed_dense(texts)
+                sparse_vecs = self._embed_sparse(texts)
+
+                points = []
+                for i, chunk in enumerate(batch):
+                    point = PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector={
+                            self.CONTENT_VECTOR_NAME: dense_vecs[i],
+                            "bm25": SparseVector(
+                                indices=sparse_vecs[i]["indices"],
+                                values=sparse_vecs[i]["values"],
+                            ),
+                        },
+                        payload=chunk,
+                    )
+                    points.append(point)
+
+                self.client.upsert(collection_name=collection_name, points=points)
+                stats.indexed += len(batch)
+            except Exception as e:
+                print(f"Error indexing content batch at {batch_start}: {e}")
+                stats.errors += len(batch)
+
+            if progress_callback:
+                progress_callback(stats.indexed, stats.total_objects)
+
+        return stats
+
+    def close(self):
+        self.http.close()
+        self.client.close()

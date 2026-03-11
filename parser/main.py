@@ -133,6 +133,27 @@ def reload(config_path: str | None = None):
     }
 
 
+@app.post("/parse-hbk")
+def parse_hbk_endpoint():
+    """Парсит HBK-файл справки платформы 1С → список чанков."""
+    from help_parser import parse_hbk
+
+    hbk_path = cfg.HBK_PATH
+    if not hbk_path.exists():
+        raise HTTPException(status_code=404, detail=f"HBK файл не найден: {hbk_path}")
+    chunks = parse_hbk(hbk_path)
+    return {"chunks": chunks, "total": len(chunks)}
+
+
+@app.post("/parse-bsp-help")
+def parse_bsp_help_endpoint():
+    """Парсит HTML-файлы справки БСП из configuration."""
+    from help_parser import parse_bsp_help
+
+    chunks = parse_bsp_help(cfg.CONFIG_PATH)
+    return {"chunks": chunks, "total": len(chunks)}
+
+
 if __name__ == "__main__":
     import uvicorn
 
