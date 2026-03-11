@@ -1,7 +1,8 @@
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre
 
-RUN apk add --no-cache python3 py3-pip curl \
-    && pip3 install --break-system-packages flask==3.1.* --no-cache-dir
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip curl \
+    && pip3 install --break-system-packages flask==3.1.* --no-cache-dir \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
