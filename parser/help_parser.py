@@ -1,6 +1,8 @@
 """Парсеры справки платформы 1С (HBK) и БСП (HTML)."""
 
+import io
 import re
+import struct
 import zipfile
 from html.parser import HTMLParser
 from pathlib import Path
@@ -68,8 +70,77 @@ def _chunk_text(text: str, max_tokens: int = 500, overlap: int = 100) -> list[st
     return [c for c in chunks if c]
 
 
+def _read_v8_block_chain(data: bytes, offset: int) -> bytes:
+    """Read a block chain from 1C v8 container format.
+
+    Each block has a 31-byte ASCII header: \\r\\n{total_hex} {page_hex} {next_hex} \\r\\n
+    """
+    result = bytearray()
+    total_size = None
+    while offset != 0x7FFFFFFF and offset < len(data):
+        header = data[offset:offset + 31]
+        if len(header) < 31 or header[:2] != b"\r\n":
+            break
+        text = header[2:29].strip()
+        parts = text.split()
+        if len(parts) < 3:
+            break
+        if total_size is None:
+            total_size = int(parts[0], 16)
+        page_size = int(parts[1], 16)
+        next_block = int(parts[2], 16)
+        remaining = total_size - len(result)
+        to_read = min(page_size, remaining)
+        result.extend(data[offset + 31:offset + 31 + to_read])
+        if next_block == 0x7FFFFFFF or len(result) >= total_size:
+            break
+        offset = next_block
+    return bytes(result)
+
+
+def _extract_hbk_html_files(hbk_path: Path) -> zipfile.ZipFile:
+    """Extract FileStorage ZIP from 1C HBK container.
+
+    HBK uses 1C v8 container format with entities: Book, FileStorage, PackBlock, etc.
+    FileStorage contains a ZIP archive with HTML documentation pages.
+    """
+    data = hbk_path.read_bytes()
+
+    # Parse TOC: starts at offset 0x2f (after 16-byte header + 31-byte TOC block header)
+    toc_start = 0x2F
+    # TOC first block header at offset 0x10 tells us total data size
+    toc_header = data[0x10:0x10 + 31]
+    toc_text = toc_header[2:29].strip()
+    toc_parts = toc_text.split()
+    toc_data_size = int(toc_parts[0], 16)
+
+    toc_data = data[toc_start:toc_start + toc_data_size]
+
+    # TOC is array of 12-byte entries: (header_addr, body_addr, end_marker)
+    file_storage_body = None
+    for i in range(0, len(toc_data) - 8, 12):
+        hdr_addr, body_addr, _ = struct.unpack_from("<III", toc_data, i)
+        if hdr_addr == 0 and body_addr == 0:
+            break
+        # Read entity name from header block
+        name_data = _read_v8_block_chain(data, hdr_addr)
+        try:
+            name = name_data.decode("utf-16-le").rstrip("\x00").strip()
+        except Exception:
+            continue
+        if name.endswith("FileStorage"):
+            file_storage_body = body_addr
+            break
+
+    if file_storage_body is None:
+        raise ValueError("FileStorage entity not found in HBK container")
+
+    fs_data = _read_v8_block_chain(data, file_storage_body)
+    return zipfile.ZipFile(io.BytesIO(fs_data))
+
+
 def parse_hbk(hbk_path: Path) -> list[dict]:
-    """Parse 1C HBK help file (zip archive with HTML).
+    """Parse 1C HBK help file (v8 container with HTML inside FileStorage ZIP).
 
     Returns list of {title, section, content} chunks.
     """
@@ -77,37 +148,47 @@ def parse_hbk(hbk_path: Path) -> list[dict]:
         raise FileNotFoundError(f"HBK file not found: {hbk_path}")
 
     chunks = []
-    with zipfile.ZipFile(hbk_path, "r") as zf:
-        html_files = [n for n in zf.namelist() if n.lower().endswith((".html", ".htm"))]
-        for name in html_files:
-            try:
-                raw = zf.read(name)
-                # Try common encodings
-                for enc in ("utf-8", "windows-1251", "cp1251"):
-                    try:
-                        html = raw.decode(enc)
-                        break
-                    except UnicodeDecodeError:
-                        continue
-                else:
-                    html = raw.decode("utf-8", errors="replace")
+    zf = _extract_hbk_html_files(hbk_path)
 
-                title = _extract_title(html) or Path(name).stem
-                section = str(Path(name).parent)
-                text = _html_to_text(html)
-
-                if len(text) < 20:
+    for name in zf.namelist():
+        try:
+            raw = zf.read(name)
+            # Try common encodings
+            for enc in ("utf-8", "windows-1251", "cp1251"):
+                try:
+                    html = raw.decode(enc)
+                    break
+                except UnicodeDecodeError:
                     continue
+            else:
+                html = raw.decode("utf-8", errors="replace")
 
-                for chunk in _chunk_text(text):
-                    chunks.append({
-                        "title": title,
-                        "section": section,
-                        "content": chunk,
-                    })
-            except Exception:
+            # Skip non-HTML content
+            if "<html" not in html.lower() and "<body" not in html.lower():
                 continue
 
+            title = _extract_title(html) or name
+            # Extract first H1 as title if no <title>
+            if not title or title == name:
+                m = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.IGNORECASE | re.DOTALL)
+                if m:
+                    title = re.sub(r"<[^>]+>", "", m.group(1)).strip()
+
+            text = _html_to_text(html)
+
+            if len(text) < 20:
+                continue
+
+            for chunk in _chunk_text(text):
+                chunks.append({
+                    "title": title or name,
+                    "section": name,
+                    "content": chunk,
+                })
+        except Exception:
+            continue
+
+    zf.close()
     return chunks
 
 

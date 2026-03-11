@@ -56,6 +56,24 @@ col3.metric("Qdrant", "OK" if qdrant_ok else "Недоступен")
 
 all_ok = parser_ok and embeddings_ok and qdrant_ok
 
+
+def show_collection_status(col_name: str) -> None:
+    """Показывает статус коллекции Qdrant: количество точек или 'не создана'."""
+    if not qdrant_ok:
+        return
+    try:
+        from qdrant_client import QdrantClient as _QC2
+        _qc2 = _QC2(host=QDRANT_HOST, port=QDRANT_PORT)
+        _cols2 = [c.name for c in _qc2.get_collections().collections]
+        if col_name in _cols2:
+            _info2 = _qc2.get_collection(col_name)
+            st.success(f"Коллекция `{col_name}`: **{_info2.points_count}** точек проиндексировано.")
+        else:
+            st.info(f"Коллекция `{col_name}` ещё не создана.")
+        _qc2.close()
+    except Exception:
+        pass
+
 # ============================================================
 # Вкладки
 # ============================================================
@@ -300,6 +318,8 @@ with tab_help:
         key="help_collection",
     )
 
+    show_collection_status(help_collection)
+
     help_ready = parser_ok and qdrant_ok and embeddings_ok
     if not help_ready:
         st.error("Нужны Parser + Qdrant + Embeddings.")
@@ -373,6 +393,8 @@ with tab_bsp:
         key="bsp_collection",
     )
 
+    show_collection_status(bsp_collection)
+
     bsp_ready = parser_ok and qdrant_ok and embeddings_ok
     if not bsp_ready:
         st.error("Нужны Parser + Qdrant + Embeddings.")
@@ -445,6 +467,8 @@ with tab_tpl:
         value=DEFAULT_TEMPLATES_COLLECTION,
         key="tpl_collection",
     )
+
+    show_collection_status(tpl_collection)
 
     tpl_ready = qdrant_ok and embeddings_ok
     if not tpl_ready:
