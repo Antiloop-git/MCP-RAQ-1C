@@ -65,6 +65,10 @@ dist/
 *.js.map
 *.tsbuildinfo
 
+# Nginx secrets
+nginx/.htpasswd
+nginx/ssl/
+
 # HuggingFace model cache
 model_cache/
 .cache/
