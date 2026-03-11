@@ -1,4 +1,4 @@
-# Карта MCP-инструментов v0.3.1
+# Карта MCP-инструментов v0.4.0
 
 **Конфигурация:** ASTOR «Торговый дом 7 SE» (~5800 объектов, 3032 BSL-модуля)
 **MCP endpoint:** `http://10.1.231.253/mcp`
@@ -9,22 +9,32 @@
 | Компонент | Технология | Роль | Порт | Статус |
 |---|---|---|---|---|
 | **Nginx** | Reverse proxy | Единая точка входа, auth для Loader, SSE support | 80 | ✅ Работает |
-| **Parser** | Python / FastAPI | Читает XML-выгрузку конфигурации 1С, отдаёт объекты по REST | 8001 | ✅ Healthy |
-| **Embeddings** | `sergeyzh/BERTA` (768d) | Векторизует описания и BSL-код; dense + sparse (BM25) | 5050 | ✅ Healthy |
-| **Qdrant** | v1.13.2 | Векторная БД: коллекции `metadata_1c` и `code_1c` | 6333 | ✅ Healthy |
-| **Loader** | Python / Streamlit | UI индексации: «Метаданные» и «BSL-код» | 8501 | ✅ Up |
-| **MCP Server** | TypeScript / Node.js | HTTP MCP-сервер (Streamable HTTP + SSE), 9 инструментов | 8000 | ✅ Healthy |
+| **Parser** | Python / FastAPI | Читает XML-выгрузку + HBK/BSP справку, отдаёт по REST | 8001 | ✅ Healthy |
+| **Embeddings** | `sergeyzh/BERTA` (768d) | Векторизует описания, код, справку; dense + sparse (BM25) | 5050 | ✅ Healthy |
+| **Qdrant** | v1.13.2 | Векторная БД: 5 коллекций (metadata, code, help, bsp, templates) | 6333 | ✅ Healthy |
+| **Loader** | Python / Streamlit | UI индексации: 5 вкладок | 8501 | ✅ Up |
+| **MCP Server** | TypeScript / Node.js | HTTP MCP-сервер (Streamable HTTP + SSE), 13 инструментов | 8000 | ✅ Healthy |
+| **BSL LS** | Java / Flask sidecar | BSL Language Server для проверки синтаксиса 1С | 8005 | ✅ Healthy |
 
-**VPS:** 10.1.231.253, Ubuntu 24.04, 8GB RAM, 87GB disk (49GB свободно), auto-deploy каждые 2 мин.
+**VPS:** 10.1.231.253, Ubuntu 24.04, 8GB RAM, 87GB disk, auto-deploy каждые 2 мин.
+
+**Qdrant-коллекции:**
+
+| Коллекция | Содержимое | Чанков |
+|---|---|---|
+| `metadata_1c` | Метаданные конфигурации (36 типов) | ~5800 |
+| `code_1c` | BSL-код модулей (процедуры/функции) | ~12800 |
+| `help_1c` | Справка платформы 1С (из HBK) | ~600 |
+| `bsp_1c` | Справка БСП (HTML из конфигурации) | ~1500 |
+| `templates_1c` | Шаблоны кода 1С (58 шт., 16 категорий) | 58 |
 
 ```bash
-docker compose up -d                    # основной стек (6 сервисов)
-docker compose -f docker-compose.comol.yml up -d  # comol-серверы (опционально)
+docker compose up -d                    # основной стек (7 сервисов)
 ```
 
 ---
 
-## Наши инструменты (MCP Server :8000) — 9 шт.
+## MCP-инструменты — 13 шт.
 
 ### Метаданные (4)
 
@@ -42,6 +52,15 @@ docker compose -f docker-compose.comol.yml up -d  # comol-серверы (опц
 | `1c_dependencies` | Граф зависимостей: документ↔регистры | ✅ Работает |
 | `1c_subsystems` | Навигация по подсистемам (дерево, содержимое, поиск) | ✅ Работает |
 
+### Инструменты разработчика (4) — NEW в v0.4.0
+
+| Инструмент | Описание | Статус |
+|---|---|---|
+| `1c_syntax_check` | Проверка синтаксиса BSL-кода (через BSL Language Server) | ✅ Работает (при BSL_LS_URL) |
+| `1c_help_search` | Поиск по справке платформы 1С (коллекция `help_1c`) | ✅ Работает |
+| `1c_bsp_search` | Поиск по справке БСП (коллекция `bsp_1c`) | ✅ Работает |
+| `1c_templates` | Шаблоны кода 1С по категориям (коллекция `templates_1c`) | ✅ Работает |
+
 ### OData — живые данные (3)
 
 | Инструмент | Описание | Статус |
@@ -49,25 +68,6 @@ docker compose -f docker-compose.comol.yml up -d  # comol-серверы (опц
 | `1c_odata_query` | Универсальный OData-запрос к 1С | ✅ Работает (при ODATA_URL) |
 | `1c_register_balances` | Остатки/обороты регистров | ✅ Работает (при ODATA_URL) |
 | `1c_register_movements` | Движения регистров за период | ✅ Работает (при ODATA_URL) |
-
----
-
-## Внешние серверы (comol/DISTAR)
-
-Запускаются через `docker-compose.comol.yml`. Лицензионные ключи в `.env.comol`.
-
-| Сервер | Образ | Порт | Описание | Статус |
-|---|---|---|---|---|
-| HelpSearchServer | `comol/1c_help_mcp` | 8003 | Справка по платформе 1С | ❌ Невалидный ключ |
-| TemplatesSearchServer | `comol/template-search-mcp` | 8004 | Шаблоны кода + веб-редактор | ❌ Невалидный ключ |
-| SyntaxCheckServer | `comol/1c_syntaxcheck_mcp` | 8002 | Проверка синтаксиса BSL LS | ❌ Невалидный ключ |
-| SSLSearchServer | `comol/mcp_ssl_server` | 8008 | Справка по БСП | ❌ Невалидный ключ |
-
-Не подключаем (причины):
-- `1c_code_metadata_mcp` — дублирует наши `1c_metadata_search` + `1c_code_search`
-- `1c_graph_metadata` — тяжёлый (Neo4j + 2GB RAM), дублирует `1c_dependencies`
-- `1c-code-checker` — требует партнёрский токен
-- `1c_forms` — отложен на будущее
 
 ---
 
@@ -80,8 +80,9 @@ docker compose -f docker-compose.comol.yml up -d  # comol-серверы (опц
 | Узнать зависимости объекта | — | ✅ | `1c_dependencies` |
 | Найти объект в подсистемах | ✅ | ✅ | `1c_subsystems` |
 | Найти код бизнес-логики | — | ✅ | `1c_code_search` |
+| Справка по платформе | — | ✅ | `1c_help_search` |
+| Справка по БСП | — | ✅ | `1c_bsp_search` |
+| Проверить синтаксис BSL | — | ✅ | `1c_syntax_check` |
+| Шаблоны кода | — | ✅ | `1c_templates` |
 | Получить данные из 1С | ✅ | — | `1c_odata_query` |
 | Остатки/обороты регистров | ✅ | — | `1c_register_balances` |
-| Справка по платформе | — | ✅ | comol HelpSearch |
-| Проверить синтаксис BSL | — | ✅ | comol SyntaxCheck |
-| Шаблоны кода | — | ✅ | comol Templates |
