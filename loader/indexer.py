@@ -208,8 +208,11 @@ class QdrantIndexer:
                     payload = self._build_payload(obj)
                     payload["config_name"] = config_name
 
+                    # Deterministic ID: same config+object → same UUID → no duplicates
+                    obj_key = f"{config_name}:{obj['name']}"
+                    point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, obj_key))
                     point = PointStruct(
-                        id=str(uuid.uuid4()),
+                        id=point_id,
                         vector={
                             "object_name": name_vectors[i],
                             "friendly_name": friendly_vectors[i],
@@ -418,8 +421,11 @@ class BslIndexer:
 
                 points = []
                 for i, chunk in enumerate(batch):
+                    # Deterministic ID: same file+proc → same UUID → upsert overwrites, no duplicates
+                    chunk_key = f"{chunk.file_path}:{chunk.proc_name}"
+                    point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, chunk_key))
                     point = PointStruct(
-                        id=str(uuid.uuid4()),
+                        id=point_id,
                         vector={
                             self.CODE_VECTOR_NAME: dense_vecs[i],
                             "bm25": SparseVector(
@@ -534,8 +540,12 @@ class ContentIndexer:
 
                 points = []
                 for i, chunk in enumerate(batch):
+                    # Deterministic ID based on title/id or global index
+                    chunk_id_src = chunk.get("title") or chunk.get("id") or str(batch_start + i)
+                    content_key = f"{collection_name}:{chunk_id_src}"
+                    point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, content_key))
                     point = PointStruct(
-                        id=str(uuid.uuid4()),
+                        id=point_id,
                         vector={
                             self.CONTENT_VECTOR_NAME: dense_vecs[i],
                             "bm25": SparseVector(
