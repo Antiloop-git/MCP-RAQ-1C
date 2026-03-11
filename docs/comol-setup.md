@@ -69,6 +69,35 @@ docker compose -f docker-compose.comol.yml ps
 | `COMOL_*_RESET_CACHE` | Сброс кэша при старте | `false` |
 | `COMOL_*_RESET_DATABASE` | Пересоздание БД при старте | `false` |
 
+## Выборочный запуск
+
+Скрипт `scripts/comol.sh` позволяет запускать серверы по отдельности:
+
+```bash
+# Справка
+./scripts/comol.sh
+
+# Запустить только Help (справка по платформе)
+./scripts/comol.sh start help
+
+# Запустить Help + SSL
+./scripts/comol.sh start help ssl
+
+# Статус всех COMOL-контейнеров
+./scripts/comol.sh status
+
+# Логи индексации (Ctrl+C для выхода)
+./scripts/comol.sh logs help
+
+# Остановить конкретный сервер
+./scripts/comol.sh stop help
+
+# Остановить все
+./scripts/comol.sh stop
+```
+
+Доступные алиасы: `help` (8003), `ssl` (8008), `templates` (8004), `syntax` (8002).
+
 ## Порты
 
 Порты comol-серверов (8002-8008) не конфликтуют с основным стеком (5050, 6333, 8000, 8001, 8501). При необходимости порты настраиваются через переменные `COMOL_*_PORT` в `.env.comol`.

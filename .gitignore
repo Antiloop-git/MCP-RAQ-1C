@@ -22,7 +22,10 @@ Thumbs.db
 qdrant_data/
 
 # 1C configuration dumps (large files)
-Конфигуратор/
+configuration/
+
+# 1C platform bin (for comol Help server)
+bin/
 
 # Parsed metadata (generated, large)
 parsed_metadata/

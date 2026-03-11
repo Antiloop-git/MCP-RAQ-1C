@@ -4,9 +4,9 @@ services:
     ports:
       - "${PARSER_PORT:-8001}:8001"
     volumes:
-      - ${CONFIG_HOST_PATH:-./Конфигуратор}:/app/Конфигуратор:ro
+      - ${CONFIG_HOST_PATH:-./configuration}:/app/configuration:ro
     environment:
-      - CONFIG_PATH=${CONFIG_PATH:-/app/Конфигуратор/Prod}
+      - CONFIG_PATH=${CONFIG_PATH:-/app/configuration/Prod}
     healthcheck:
       test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\"" ]
       interval: 10s

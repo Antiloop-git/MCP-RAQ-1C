@@ -1,3 +1,4 @@
+import { LRUCache } from "lru-cache";
 import { config } from "../config.js";
 
 /**
@@ -17,6 +18,37 @@ export interface ODataError {
     message: { lang: string; value: string };
   };
 }
+
+// --- LRU Cache ---
+
+const cache = new LRUCache<string, unknown[]>({
+  max: config.odataCacheMaxSize,
+  ttl: config.odataCacheTtlMs,
+});
+
+function cacheKey(entitySet: string, params?: Record<string, string>): string {
+  const sorted = params
+    ? Object.keys(params).sort().map(k => `${k}=${params[k]}`).join("&")
+    : "";
+  return `${entitySet}?${sorted}`;
+}
+
+/** Cache statistics for health/debug endpoints */
+export function odataCacheStats(): { enabled: boolean; size: number; ttlMs: number; maxSize: number } {
+  return {
+    enabled: config.odataCacheEnabled,
+    size: cache.size,
+    ttlMs: config.odataCacheTtlMs,
+    maxSize: config.odataCacheMaxSize,
+  };
+}
+
+/** Clear the OData cache (e.g. when data is known to have changed) */
+export function odataCacheClear(): void {
+  cache.clear();
+}
+
+// --- HTTP helpers ---
 
 function getBaseUrl(): string {
   const url = config.odataUrl;
@@ -42,7 +74,7 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 /**
- * Execute an OData GET request.
+ * Execute an OData GET request (with LRU cache).
  * @param entitySet - e.g. "AccumulationRegister_ДвижениеТМЦ_Balance"
  * @param params - OData query params ($filter, $select, $top, $orderby, etc.)
  */
@@ -50,6 +82,15 @@ export async function odataGet<T = Record<string, unknown>>(
   entitySet: string,
   params?: Record<string, string>
 ): Promise<T[]> {
+  // Check cache
+  if (config.odataCacheEnabled) {
+    const key = cacheKey(entitySet, params);
+    const cached = cache.get(key);
+    if (cached) {
+      return cached as T[];
+    }
+  }
+
   const base = getBaseUrl();
   // Encode each path segment separately to preserve '/' for FunctionImports
   // e.g. "AccumulationRegister_УчетПартий/Balance"
@@ -85,7 +126,14 @@ export async function odataGet<T = Record<string, unknown>>(
   }
 
   const data = (await response.json()) as ODataResponse<T>;
-  return data.value ?? [];
+  const result = data.value ?? [];
+
+  // Store in cache
+  if (config.odataCacheEnabled) {
+    cache.set(cacheKey(entitySet, params), result);
+  }
+
+  return result;
 }
 
 /**

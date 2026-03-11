@@ -11,4 +11,8 @@ export const config = {
   odataUser: process.env.ODATA_USER ?? "",
   odataPassword: process.env.ODATA_PASSWORD ?? "",
   odataTimeout: parseInt(process.env.ODATA_TIMEOUT ?? "30000", 10),
+  // OData cache
+  odataCacheEnabled: process.env.ODATA_CACHE_ENABLED !== "false",
+  odataCacheTtlMs: parseInt(process.env.ODATA_CACHE_TTL ?? "300", 10) * 1000, // seconds → ms, default 5 min
+  odataCacheMaxSize: parseInt(process.env.ODATA_CACHE_MAX_SIZE ?? "500", 10),
 } as const;

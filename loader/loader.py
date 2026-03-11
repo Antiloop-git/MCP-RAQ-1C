@@ -75,7 +75,7 @@ with tab_meta:
         "Путь к XML-выгрузке конфигурации (внутри контейнера parser)",
         value=current_config_path,
         help="Путь к папке с XML-файлами конфигурации 1С внутри контейнера parser. "
-        "По умолчанию: /app/Конфигуратор/Prod. "
+        "По умолчанию: /app/configuration/Prod. "
         "Для использования другой папки примонтируйте её в docker-compose.yml "
         "в секции parser → volumes.",
     )

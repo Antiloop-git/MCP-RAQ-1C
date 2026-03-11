@@ -21,7 +21,7 @@ Supports any 1C:Enterprise 8.3 configuration exported to XML. Tested with config
 cd parser && python3 -m pytest tests/test_parser.py -v
 
 # Export parsed metadata to JSON
-cd parser && python3 export.py "../Конфигуратор/Prod" "../parsed_metadata"
+cd parser && python3 export.py "../configuration/Prod" "../parsed_metadata"
 
 # Start Docker (parser + qdrant)
 docker compose up qdrant parser --build -d
@@ -40,7 +40,7 @@ Vector DB: Qdrant (:6333). Hybrid search: dense (BERTA 768d) + sparse (BM25) + R
 
 ## Parser Details
 
-36 object types parsed from `Конфигуратор/Prod/`:
+36 object types parsed from `configuration/Prod/`:
 - Core data: Catalog, Document, AccumulationRegister, InformationRegister, AccountingRegister, Enum, Constant
 - References: ChartOfAccounts, ChartOfCharacteristicTypes, ExchangePlan, BusinessProcess, Task
 - Metadata: DefinedType, DocumentJournal, DataProcessor, Report
@@ -66,6 +66,10 @@ Extra data extracted:
 ## 1C XML Structure
 
 XML namespace: `http://v8.1c.ru/8.3/MDClasses`. Each `.xml` file wraps a `<MetaDataObject>` with child element named after the type (e.g., `<Catalog>`, `<Document>`). Properties in `<md:Properties>`, child objects in `<md:ChildObjects>`.
+
+## Skills
+
+Скилл `1c-analyst` (аналитик 1С) перенесён в глобальную директорию `~/.claude/skills/1c-analyst/` и доступен из любого проекта. Содержит: справочник OData-сущностей ASTOR Prod, синтаксис запросов 1С, аналитические сценарии (продажи, остатки, MES Kitchen), скрипты `query-1c.sh`/`.ps1`.
 
 ## Language
 

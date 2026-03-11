@@ -69,6 +69,6 @@ def export(config_path: Path, output_dir: Path) -> None:
 
 
 if __name__ == "__main__":
-    config = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("../Конфигуратор/Prod")
+    config = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("../configuration/Prod")
     output = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("../parsed_metadata")
     export(config, output)

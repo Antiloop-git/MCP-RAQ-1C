@@ -271,7 +271,7 @@ class TestEdgeCases:
 # === Тест на реальных файлах конфигурации ===
 
 
-REAL_CONFIG = Path(__file__).resolve().parent.parent.parent / "Конфигуратор" / "Prod"
+REAL_CONFIG = Path(__file__).resolve().parent.parent.parent / "configuration" / "Prod"
 
 
 @pytest.mark.skipif(not REAL_CONFIG.exists(), reason="Real config not available")

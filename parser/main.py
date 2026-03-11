@@ -15,7 +15,7 @@ _cache: list[MetadataObject] = []
 # Индекс: {object_type: {name: [MetadataObject, ...]}}
 _index: dict[ObjectType, dict[str, list[MetadataObject]]] = {}
 
-ALLOWED_CONFIG_PREFIX = Path("/app/Конфигуратор")
+ALLOWED_CONFIG_PREFIX = Path("/app/configuration")
 
 
 def _ensure_cache() -> None:

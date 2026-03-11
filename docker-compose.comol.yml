@@ -16,11 +16,12 @@ services:
       - "${COMOL_HELP_PORT:-8003}:8003"
     environment:
       - LICENSE_KEY=${LICENSE_KEY_HELP:?LICENSE_KEY_HELP is required}
-      - 1C_BIN_PATH=${ONEC_BIN_PATH:-/1c_docs}
+      - 1C_BIN_PATH=/1c_docs
       - RESET_CACHE=${COMOL_HELP_RESET_CACHE:-false}
       - RESET_DATABASE=${COMOL_HELP_RESET_DATABASE:-false}
       - USESSE=${COMOL_USESSE:-false}
     volumes:
+      - ${ONEC_BIN_PATH:-./bin}:/1c_docs:ro
       - comol_help_db:/app/chroma_db
       - comol_help_model_cache:/app/model_cache
     restart: unless-stopped
