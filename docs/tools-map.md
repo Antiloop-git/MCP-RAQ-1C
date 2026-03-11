@@ -58,10 +58,10 @@ docker compose -f docker-compose.comol.yml up -d  # comol-серверы (опц
 
 | Сервер | Образ | Порт | Описание | Статус |
 |---|---|---|---|---|
-| HelpSearchServer | `comol/1c_help_mcp` | 8003 | Справка по платформе 1С | 🔄 Запускаем |
-| TemplatesSearchServer | `comol/template-search-mcp` | 8004 | Шаблоны кода + веб-редактор | 🔄 Запускаем |
-| SyntaxCheckServer | `comol/1c_syntaxcheck_mcp` | 8002 | Проверка синтаксиса BSL LS | 🔄 Запускаем |
-| SSLSearchServer | `comol/mcp_ssl_server` | 8008 | Справка по БСП | 🔄 Запускаем |
+| HelpSearchServer | `comol/1c_help_mcp` | 8003 | Справка по платформе 1С | ❌ Невалидный ключ |
+| TemplatesSearchServer | `comol/template-search-mcp` | 8004 | Шаблоны кода + веб-редактор | ❌ Невалидный ключ |
+| SyntaxCheckServer | `comol/1c_syntaxcheck_mcp` | 8002 | Проверка синтаксиса BSL LS | ❌ Невалидный ключ |
+| SSLSearchServer | `comol/mcp_ssl_server` | 8008 | Справка по БСП | ❌ Невалидный ключ |
 
 Не подключаем (причины):
 - `1c_code_metadata_mcp` — дублирует наши `1c_metadata_search` + `1c_code_search`
